@@ -1,0 +1,526 @@
+:root {
+  --bg: #0f1420;
+  --surface: #171e2e;
+  --surface-2: #1f2839;
+  --border: #2c374d;
+  --text: #eef2f9;
+  --muted: #93a1bb;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --danger: #e11d48;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+input {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 13px;
+  width: 100%;
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.primary {
+  background: var(--accent);
+  color: #fff;
+  padding: 13px 18px;
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.primary.danger {
+  background: var(--danger);
+}
+
+.primary.danger:hover:not(:disabled) {
+  background: #be123c;
+}
+
+.secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 11px 16px;
+  font-weight: 500;
+}
+
+.secondary:hover {
+  background: #2a3448;
+}
+
+.small {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.big {
+  width: 100%;
+  font-size: 16px;
+  padding: 15px;
+}
+
+.error {
+  color: #fda4af;
+  background: rgba(225, 29, 72, 0.12);
+  border: 1px solid rgba(225, 29, 72, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 0;
+  font-size: 13.5px;
+}
+
+/* ------------------------------------------------------------------ landing */
+
+.landing {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.hero {
+  width: min(420px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px 28px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 16px;
+}
+
+.hero-icon {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+
+.tagline {
+  margin: 0;
+  color: var(--muted);
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.field > span {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.row .secondary {
+  flex: 0 0 auto;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.fineprint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+/* --------------------------------------------------------------------- room */
+
+.room {
+  overflow: hidden;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  /* Establishes a stacking context so the map library's own panes (Leaflet uses
+     z-index up to 1000 internally) stay trapped below the app chrome. */
+  z-index: 0;
+  background: var(--surface);
+}
+
+.map-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 32px;
+  text-align: center;
+}
+
+.map-fallback h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.map-fallback p {
+  margin: 0 auto;
+  max-width: 46ch;
+  color: var(--muted);
+}
+
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  background: linear-gradient(to bottom, rgba(15, 20, 32, 0.95), rgba(15, 20, 32, 0));
+}
+
+.brand {
+  font-size: 22px;
+  text-decoration: none;
+  line-height: 1;
+}
+
+.topbar-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.room-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.status {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status.bad {
+  color: #fda4af;
+}
+
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 18px 18px 0 0;
+  box-shadow: var(--shadow);
+  padding: 6px 16px max(16px, env(safe-area-inset-bottom));
+  display: grid;
+  gap: 12px;
+  max-height: 55vh;
+  transition: transform 0.22s ease;
+}
+
+.panel-collapsed .panel {
+  transform: translateY(calc(100% - 52px));
+}
+
+.panel-grip {
+  width: 44px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 6px auto 2px;
+}
+
+.people {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px;
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.person.empty {
+  color: var(--muted);
+  font-size: 13.5px;
+  justify-content: center;
+  background: transparent;
+  border-style: dashed;
+}
+
+.swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+.person-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.person-name {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.person-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.link-button {
+  background: transparent;
+  color: #93b4ff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 8px;
+}
+
+.link-button:hover {
+  color: #c7d8ff;
+}
+
+/* --------------------------------------------------------------------- pins */
+
+.pin {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  /* Google anchors content by its bottom-centre; nudge down so the dot's centre,
+     not its bottom edge, sits on the coordinate. */
+  transform: translateY(7px);
+  pointer-events: none;
+}
+
+/* Leaflet: the divIcon root is a 0×0 box at the coordinate, so position the pin
+   relative to it to land the dot's centre on the same spot Google uses. */
+.pin-divicon {
+  background: none;
+  border: none;
+}
+
+.pin-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, calc(-100% + 7px));
+}
+
+.pin-label {
+  background: var(--pin-color);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pin-dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--pin-color);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.pin-self .pin-dot {
+  animation: pulse 2s ease-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(37, 99, 235, 0.55);
+  }
+  70% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 14px rgba(37, 99, 235, 0);
+  }
+  100% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+/* Leaflet's own chrome, themed to match the app. */
+.leaflet-container {
+  background: var(--surface);
+  font: inherit;
+}
+
+.leaflet-control-zoom a,
+.leaflet-control-attribution {
+  background: rgba(15, 20, 32, 0.9) !important;
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+}
+
+.leaflet-control-attribution a {
+  color: #93b4ff !important;
+}
+
+/* Sits below the topbar on the left, clear of the Share button and of the zoom
+   controls, which both providers place bottom-right. */
+.provider-badge {
+  position: absolute;
+  top: calc(58px + env(safe-area-inset-top));
+  left: 14px;
+  z-index: 6;
+  background: rgba(15, 20, 32, 0.9);
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+
+/* -------------------------------------------------------------------- toast */
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(55vh + 16px);
+  transform: translateX(-50%);
+  z-index: 6;
+  background: rgba(10, 14, 24, 0.94);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  box-shadow: var(--shadow);
+  max-width: calc(100% - 32px);
+  text-align: center;
+}
+
+@media (min-width: 720px) {
+  .panel {
+    left: auto;
+    right: 16px;
+    bottom: 16px;
+    width: 340px;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    max-height: calc(100vh - 100px);
+  }
+
+  .panel-collapsed .panel {
+    transform: none;
+  }
+
+  .panel-grip {
+    display: none;
+  }
+
+  .topbar {
+    background: none;
+  }
+
+  .topbar-main,
+  .brand,
+  .topbar .secondary {
+    background: rgba(15, 20, 32, 0.9);
+    border-radius: 10px;
+    padding: 8px 12px;
+  }
+
+  .topbar-main {
+    flex: 0 0 auto;
+    max-width: 260px;
+  }
+
+  .toast {
+    bottom: 24px;
+    left: 24px;
+    transform: none;
+  }
+}

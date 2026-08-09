@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log*
+
+# Secrets stay out of the image — pass them with `docker run -e` / --env-file.
+.env
+.env.local
+
+.git
+.gitignore
+.DS_Store
+Dockerfile
+.dockerignore
+README.md
+SETUP-GOOGLE-CLOUD.md

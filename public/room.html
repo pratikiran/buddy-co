@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Meet Up — live map</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>"
+    />
+  </head>
+  <body class="room">
+    <div id="map" role="application" aria-label="Map of everyone in this meetup"></div>
+
+    <div id="map-fallback" class="map-fallback" hidden>
+      <h2>The map could not load</h2>
+      <p id="map-fallback-detail"></p>
+    </div>
+
+    <header class="topbar">
+      <a class="brand" href="/" title="Home">📍</a>
+      <div class="topbar-main">
+        <div class="room-code" id="room-code">…</div>
+        <div class="status" id="status">Connecting…</div>
+      </div>
+      <button id="share" class="secondary small">Share link</button>
+    </header>
+
+    <section class="panel">
+      <div class="panel-grip" id="panel-grip" role="button" tabindex="0" aria-label="Toggle panel"></div>
+
+      <button id="share-toggle" class="primary big">Send my location</button>
+      <p id="geo-error" class="error" hidden></p>
+
+      <ul id="people" class="people"></ul>
+    </section>
+
+    <div id="provider-badge" class="provider-badge" hidden></div>
+    <div id="toast" class="toast" hidden></div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

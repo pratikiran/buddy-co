@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Meet Up — share your location</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>"
+    />
+  </head>
+  <body class="landing">
+    <main class="hero">
+      <div class="hero-icon">📍</div>
+      <h1>Meet Up</h1>
+      <p class="tagline">
+        Start a meetup, send the link to your friends, and watch everyone’s pin land on the same
+        map.
+      </p>
+
+      <label class="field">
+        <span>Your name</span>
+        <input id="name" type="text" placeholder="e.g. Pratik" maxlength="24" autocomplete="off" />
+      </label>
+
+      <button id="create" class="primary">Start a meetup</button>
+
+      <div class="divider"><span>or</span></div>
+
+      <label class="field">
+        <span>Join with a code</span>
+        <div class="row">
+          <input id="join-code" type="text" placeholder="abcd-1234" autocomplete="off" />
+          <button id="join" class="secondary">Join</button>
+        </div>
+      </label>
+
+      <p id="error" class="error" hidden></p>
+
+      <footer class="fineprint">
+        Your location is only shared while you choose to share it, and only with people who have
+        your link.
+      </footer>
+    </main>
+
+    <script>
+      const nameInput = document.getElementById('name');
+      const errorEl = document.getElementById('error');
+
+      nameInput.value = localStorage.getItem('meetup:name') || '';
+
+      function showError(message) {
+        errorEl.textContent = message;
+        errorEl.hidden = false;
+      }
+
+      function rememberName() {
+        const name = nameInput.value.trim();
+        if (name) localStorage.setItem('meetup:name', name);
+        // Per-tab identity, so two tabs on one machine act like two different people.
+        sessionStorage.setItem('meetup:name', name || 'Guest');
+      }
+
+      document.getElementById('create').addEventListener('click', async () => {
+        errorEl.hidden = true;
+        rememberName();
+        try {
+          const res = await fetch('/api/rooms', { method: 'POST' });
+          if (!res.ok) throw new Error('Server said ' + res.status);
+          const { roomId } = await res.json();
+          location.href = `/r/${roomId}`;
+        } catch (err) {
+          showError('Could not start a meetup: ' + err.message);
+        }
+      });
+
+      function join() {
+        errorEl.hidden = true;
+        const code = document.getElementById('join-code').value.trim().toLowerCase();
+        if (!code) return showError('Enter the code your friend sent you.');
+        rememberName();
+        location.href = `/r/${encodeURIComponent(code)}`;
+      }
+
+      document.getElementById('join').addEventListener('click', join);
+      document.getElementById('join-code').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') join();
+      });
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.getElementById('create').click();
+      });
+    </script>
+  </body>
+</html>
