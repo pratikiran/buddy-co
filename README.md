@@ -80,11 +80,48 @@ browser ──HTTP──▶ Express ── serves /public, /api/config, /api/roo
    └──WebSocket──▶ ws server (/ws?room=…&name=…)
                      │
                      └─ in-memory Map of rooms → members {lat,lng,accuracy,updatedAt}
-                        any location update re-broadcasts the room to everyone in it
+                        membership changes broadcast a full roster;
+                        location updates broadcast only what moved
 ```
 
+Server → client frames:
+
+| Frame | Sent when | Carries |
+| --- | --- | --- |
+| `welcome` | on connect | `selfId`, plus `serverNow` so the client can correct for clock skew |
+| `state` | someone joins or leaves | the full participant list |
+| `patch` | someone moves, renames, stops, or changes away state | `{id, patch}` — just the changed fields |
+
+Client → server: `location`, `stop`, `rename`, and `away` / `active` (sent from
+`visibilitychange`).
+
+A `patch` is always preceded by a `state` that introduced the member, and WebSocket
+delivery is ordered, so a client never has to apply a patch for someone it does not
+know. Sending the whole roster on every position update instead would put a room's
+traffic at O(M³) bytes/sec — 2.4 MB/s in a full 25-person room, against 0.1 MB/s now.
+
+### Knowing when a pin has gone cold
+
+The heartbeat cannot tell you a phone has backgrounded the tab. WebSocket ping/pong is
+answered by the browser's network stack without running any page JS, so the socket
+stays open and the server sees nothing — while `watchPosition` has stopped firing,
+because no browser grants a web page background location. Left alone that leaves a
+confident-looking pin parked where someone was ten minutes ago. Two mechanisms cover it:
+
+- **`away`** — the page sends this from `visibilitychange`, which fires *before* the
+  browser freezes it. Peers see "paused" within milliseconds.
+- **staleness** — no update for 45s and the pin greys out by itself, for every case
+  where the `away` never made it out (crash, discarded tab, dead radio). Clients
+  re-publish their last fix every 20s, so silence is real evidence rather than just
+  someone standing still, and ages are measured against `serverNow` because device
+  clocks are routinely minutes off.
+
+Either way the pin stays on the map at its last known position — greyed, dashed, and
+labelled "last seen", so it reads as history rather than as live.
+
 - `server.js` — Express + `ws`. Rooms live in memory; empty rooms are swept after 30
-  minutes. A 30s ping/pong heartbeat removes dead connections so stale pins disappear.
+  minutes, counting from creation so a link that is generated but never opened is
+  collected too. A 30s ping/pong heartbeat removes genuinely dead connections.
 - `public/app.js` — holds the socket, takes a local-only position fix on load, runs
   `navigator.geolocation.watchPosition` while you are sharing, and drives the map through
   the provider adapter. Knows nothing about Google or Leaflet specifically.
@@ -103,6 +140,13 @@ browser ──HTTP──▶ Express ── serves /public, /api/config, /api/roo
   pressing **Stop sharing** wipes your coordinates from the server and removes your pin for
   everyone — locally the faded pin comes back so the map keeps its place.
 - **Live, not one-shot.** While sharing, your pin follows you.
+- **Sharing survives a reload you did not ask for.** Phones discard backgrounded tabs; if
+  that happens the room reloads and picks sharing back up rather than quietly leaving you
+  as a frozen pin. The flag lives in `sessionStorage` keyed by room, so it applies only to
+  the same tab in the same room — closing the tab ends it.
+- **A pin you cannot trust looks like one.** Background the app and your friends see your
+  pin turn grey and read "paused"; if your browser dies outright it greys itself after 45
+  seconds. It keeps your last known position either way, labelled "last seen".
 - **Anyone with the link can join.** Room IDs are random 8-character codes, so they are not
   guessable, but they are not secret either — treat the link like a password.
 - **Nothing is persisted.** Restarting the server clears every room.

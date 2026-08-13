@@ -3,9 +3,13 @@
 
 // `muted` marks a pin that only this browser can see — your own position before
 // you have opted into sharing it with the room.
-export function buildPinElement({ name, color, isSelf, muted }) {
+// `stale` marks a pin whose owner has stopped reporting: the position is the
+// last one we were told about, not where they are now. Without this a phone that
+// backgrounded the tab keeps a pin that looks indistinguishable from a live one.
+export function buildPinElement({ name, color, isSelf, muted, stale }) {
   const wrap = document.createElement('div');
-  wrap.className = 'pin' + (isSelf ? ' pin-self' : '') + (muted ? ' pin-muted' : '');
+  wrap.className =
+    'pin' + (isSelf ? ' pin-self' : '') + (muted ? ' pin-muted' : '') + (stale ? ' pin-stale' : '');
   wrap.style.setProperty('--pin-color', color);
 
   const label = document.createElement('span');

@@ -331,6 +331,15 @@ button:focus-visible {
   border-style: dashed;
 }
 
+/* Matches .pin-stale on the map, so a grey row and a grey pin mean one thing. */
+.person.is-paused .swatch {
+  background: var(--muted) !important;
+}
+
+.person.is-paused .person-name {
+  color: var(--muted);
+}
+
 .swatch {
   width: 11px;
   height: 11px;
@@ -429,6 +438,23 @@ button:focus-visible {
 
 .pin-muted .pin-dot {
   animation: none;
+  border-style: dashed;
+}
+
+/* Last-known position, not a live one — the owner has gone quiet (backgrounded
+   the tab, lost signal). Dropping the identity colour is the point: a grey pin
+   reads as "do not trust this" at a glance, which a faded coloured one does not. */
+.pin-stale {
+  opacity: 0.75;
+}
+
+.pin-stale .pin-label {
+  background: var(--muted);
+}
+
+.pin-stale .pin-dot {
+  animation: none;
+  background: var(--muted);
   border-style: dashed;
 }
 
