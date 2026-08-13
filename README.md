@@ -14,6 +14,13 @@ npm start
 Open <http://localhost:3000>. It works immediately — with no API key it renders on
 OpenStreetMap so you can test everything today.
 
+If port 3000 is already taken (`EADDRINUSE`), pick another one — the boot log always prints
+the URL it actually bound:
+
+```bash
+PORT=3100 npm start        # or set PORT= in .env
+```
+
 ## The two maps
 
 Google Maps is the real map this app ships with. OpenStreetMap + Leaflet is a keyless
@@ -55,7 +62,10 @@ Browser geolocation only works on `localhost` or over HTTPS, so both sides must 
 3. Copy the room URL from the address bar.
 4. Tab B: open that URL in a **different browser or a private/incognito window** — identity
    is per-tab-session, and a private window guarantees a separate one.
-5. Tab B: click **Send my location**. A second, differently-coloured pin appears **in both
+5. Tab B: opening a room link with no remembered name shows the **Who's joining?** dialog —
+   type a name and join. The name is kept in `localStorage`, so this browser is not asked
+   again; **Rename** in the panel changes it later.
+6. Tab B: click **Send my location**. A second, differently-coloured pin appears **in both
    tabs**, and the panel shows the distance between you.
 
 Both tabs will report the same real coordinates (same device), so the two pins land on top
@@ -75,9 +85,9 @@ browser ──HTTP──▶ Express ── serves /public, /api/config, /api/roo
 
 - `server.js` — Express + `ws`. Rooms live in memory; empty rooms are swept after 30
   minutes. A 30s ping/pong heartbeat removes dead connections so stale pins disappear.
-- `public/app.js` — holds the socket, runs `navigator.geolocation.watchPosition` while you
-  are sharing, and drives the map through the provider adapter. Knows nothing about Google
-  or Leaflet specifically.
+- `public/app.js` — holds the socket, takes a local-only position fix on load, runs
+  `navigator.geolocation.watchPosition` while you are sharing, and drives the map through
+  the provider adapter. Knows nothing about Google or Leaflet specifically.
 - `public/map-google.js` / `public/map-osm.js` — the two adapters.
 - `public/pin.js` — the pin DOM, shared by both so a pin looks identical either way.
 - The API key is served from `/api/config` rather than baked into HTML, so the only copy on
@@ -85,9 +95,13 @@ browser ──HTTP──▶ Express ── serves /public, /api/config, /api/roo
 
 ## Behaviour worth knowing
 
+- **The map opens where you are.** On load the room takes a single coarse position fix and
+  centres the map on it, drawing a faded "You (not shared)" pin. That fix never leaves the
+  browser — it exists so the map is not a blank world view. If the permission is denied or
+  unavailable, the app stays silent and shows the world view.
 - **Sharing is opt-in and revocable.** Nothing is transmitted until you press the button;
   pressing **Stop sharing** wipes your coordinates from the server and removes your pin for
-  everyone.
+  everyone — locally the faded pin comes back so the map keeps its place.
 - **Live, not one-shot.** While sharing, your pin follows you.
 - **Anyone with the link can join.** Room IDs are random 8-character codes, so they are not
   guessable, but they are not secret either — treat the link like a password.

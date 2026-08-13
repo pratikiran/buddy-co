@@ -1,14 +1,16 @@
 // The pin DOM is shared by both map providers so a pin looks identical whether
 // it is rendered by Google's AdvancedMarkerElement or Leaflet's divIcon.
 
-export function buildPinElement({ name, color, isSelf }) {
+// `muted` marks a pin that only this browser can see — your own position before
+// you have opted into sharing it with the room.
+export function buildPinElement({ name, color, isSelf, muted }) {
   const wrap = document.createElement('div');
-  wrap.className = 'pin' + (isSelf ? ' pin-self' : '');
+  wrap.className = 'pin' + (isSelf ? ' pin-self' : '') + (muted ? ' pin-muted' : '');
   wrap.style.setProperty('--pin-color', color);
 
   const label = document.createElement('span');
   label.className = 'pin-label';
-  label.textContent = isSelf ? 'You' : name;
+  label.textContent = muted ? 'You (not shared)' : isSelf ? 'You' : name;
 
   const dot = document.createElement('span');
   dot.className = 'pin-dot';

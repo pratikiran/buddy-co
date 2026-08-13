@@ -56,10 +56,16 @@
       }
 
       function rememberName() {
-        const name = nameInput.value.trim();
-        if (name) localStorage.setItem('meetup:name', name);
-        // Per-tab identity, so two tabs on one machine act like two different people.
-        sessionStorage.setItem('meetup:name', name || 'Guest');
+        const name = nameInput.value.trim().replace(/\s+/g, ' ').slice(0, 24);
+        // An empty box is not an identity: leaving the keys clear is what makes
+        // the room page ask for a name instead of joining you as a guest.
+        if (name) {
+          localStorage.setItem('meetup:name', name);
+          // Per-tab identity, so two tabs on one machine act like two different people.
+          sessionStorage.setItem('meetup:name', name);
+        } else {
+          sessionStorage.removeItem('meetup:name');
+        }
       }
 
       document.getElementById('create').addEventListener('click', async () => {
