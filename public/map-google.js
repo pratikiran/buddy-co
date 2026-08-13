@@ -51,6 +51,9 @@ export async function createMap(container, config) {
     fullscreenControl: false,
     clickableIcons: false,
     gestureHandling: 'greedy',
+    // Google's default bottom-right corner is behind the roster panel; the CSS
+    // for .gm-bundled-control then clears the topbar.
+    zoomControlOptions: { position: google.maps.ControlPosition.LEFT_TOP },
   });
 
   const markers = new Map();
@@ -60,13 +63,13 @@ export async function createMap(container, config) {
       map.addListener('dragstart', onPan);
     },
 
-    upsertMarker(id, { position, name, color, isSelf, accuracy, signature }) {
+    upsertMarker(id, { position, name, color, isSelf, muted, accuracy, signature }) {
       let entry = markers.get(id);
       if (!entry) {
         const marker = new AdvancedMarkerElement({
           map,
           position,
-          content: buildPinElement({ name, color, isSelf }),
+          content: buildPinElement({ name, color, isSelf, muted }),
           title: isSelf ? 'You' : name,
           zIndex: isSelf ? 10 : 1,
         });
@@ -88,7 +91,7 @@ export async function createMap(container, config) {
         // Only swap the pin DOM when the label or colour actually changed —
         // rebuilding it every GPS tick would restart the pulse animation.
         if (entry.signature !== signature) {
-          entry.marker.content = buildPinElement({ name, color, isSelf });
+          entry.marker.content = buildPinElement({ name, color, isSelf, muted });
           entry.marker.title = isSelf ? 'You' : name;
           entry.signature = signature;
         }

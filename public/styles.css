@@ -16,6 +16,12 @@
   box-sizing: border-box;
 }
 
+/* A `display` rule of our own would otherwise beat the hidden attribute — which
+   is how the "map could not load" panel ended up showing behind a working map. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -416,6 +422,16 @@ button:focus-visible {
   animation: pulse 2s ease-out infinite;
 }
 
+/* Local-only preview pin: visible to you, not published to the room. */
+.pin-muted {
+  opacity: 0.62;
+}
+
+.pin-muted .pin-dot {
+  animation: none;
+  border-style: dashed;
+}
+
 @keyframes pulse {
   0% {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(37, 99, 235, 0.55);
@@ -428,10 +444,22 @@ button:focus-visible {
   }
 }
 
+/* Google stacks its zoom buttons in this wrapper; drop them below the topbar,
+   mirroring the Leaflet offset. */
+.gm-bundled-control {
+  margin-top: calc(48px + env(safe-area-inset-top)) !important;
+}
+
 /* Leaflet's own chrome, themed to match the app. */
 .leaflet-container {
   background: var(--surface);
   font: inherit;
+}
+
+/* Push Leaflet's top-left controls below the topbar — its own 10px offset would
+   tuck the zoom buttons underneath it. */
+.leaflet-top.leaflet-left {
+  top: calc(58px + env(safe-area-inset-top));
 }
 
 .leaflet-control-zoom a,
@@ -441,15 +469,28 @@ button:focus-visible {
   border-color: var(--border) !important;
 }
 
+/* Comfortable touch targets; Leaflet's default 30px is tight on a phone. */
+.leaflet-control-zoom a {
+  width: 36px !important;
+  height: 36px !important;
+  line-height: 34px !important;
+  font-size: 20px !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+}
+
 .leaflet-control-attribution a {
   color: #93b4ff !important;
 }
 
-/* Sits below the topbar on the left, clear of the Share button and of the zoom
-   controls, which both providers place bottom-right. */
+/* Left-hand column, below the topbar and below the zoom buttons that now live
+   there (two 36px keys plus Leaflet's 10px margin). */
 .provider-badge {
   position: absolute;
-  top: calc(58px + env(safe-area-inset-top));
+  top: calc(152px + env(safe-area-inset-top));
   left: 14px;
   z-index: 6;
   background: rgba(15, 20, 32, 0.9);
@@ -461,6 +502,50 @@ button:focus-visible {
   text-transform: uppercase;
   padding: 5px 10px;
   border-radius: 999px;
+}
+
+/* ------------------------------------------------------------- name dialog */
+
+.name-dialog {
+  width: min(380px, calc(100vw - 32px));
+  padding: 26px 24px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+
+.name-dialog::backdrop {
+  background: rgba(8, 11, 18, 0.72);
+}
+
+.name-dialog form {
+  display: grid;
+  gap: 15px;
+}
+
+.name-dialog h2 {
+  margin: 0;
+  font-size: 21px;
+  letter-spacing: -0.01em;
+}
+
+.name-dialog-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dialog-actions .primary {
+  flex: 1;
+  padding: 14px 18px;
+  font-size: 16px;
 }
 
 /* -------------------------------------------------------------------- toast */

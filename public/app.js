@@ -16,11 +16,21 @@ const el = {
   mapFallbackDetail: document.getElementById('map-fallback-detail'),
   panelGrip: document.getElementById('panel-grip'),
   providerBadge: document.getElementById('provider-badge'),
+  nameDialog: document.getElementById('name-dialog'),
+  nameForm: document.getElementById('name-form'),
+  nameTitle: document.getElementById('name-dialog-title'),
+  nameSub: document.getElementById('name-dialog-sub'),
+  nameInput: document.getElementById('name-input'),
+  nameError: document.getElementById('name-error'),
+  nameSubmit: document.getElementById('name-submit'),
+  nameCancel: document.getElementById('name-cancel'),
 };
 
 el.roomCode.textContent = roomId;
 
 const state = {
+  name: '', // what this browser publishes as; empty until the user has said
+  joined: false, // true once we have a name and a socket has been opened
   selfId: null,
   participants: [],
   sharing: false,
@@ -31,7 +41,12 @@ const state = {
   renderedIds: new Set(), // participant ids currently drawn on the map
   hasAutoFitted: false,
   userMovedMap: false,
+  previewCoords: null, // our own position, shown locally but not published
 };
+
+// Marker id for the local-only preview pin. Prefixed so it can never collide
+// with a server-assigned participant id.
+const PREVIEW_ID = '__preview__';
 
 // Distinct colors so each pin is tellable apart at a glance. Index 0 is reserved
 // for "you".
@@ -120,6 +135,9 @@ function renderMarkers() {
     });
     state.renderedIds.add(participant.id);
   }
+
+  // Our real pin supersedes the local-only preview of the same position.
+  if (located.some((p) => p.id === state.selfId)) clearPreview();
 
   fitViewport(located);
 }
@@ -210,6 +228,14 @@ function renderPeople() {
     text.append(name, meta);
     li.append(swatch, text);
 
+    if (isSelf) {
+      const rename = document.createElement('button');
+      rename.className = 'link-button';
+      rename.textContent = 'Rename';
+      rename.addEventListener('click', () => openNameDialog('edit'));
+      li.append(rename);
+    }
+
     if (participant.sharing && participant.lat !== null) {
       const focus = document.createElement('button');
       focus.className = 'link-button';
@@ -244,12 +270,104 @@ function renderAll() {
 // Keeps the "updated 12s ago" strings honest without any server chatter.
 setInterval(renderPeople, 10000);
 
+// ------------------------------------------------------------------ Identity
+
+const NAME_KEY = 'meetup:name';
+const MAX_NAME_LENGTH = 24; // matches sanitizeName() on the server
+
+/**
+ * The name this browser has used before. localStorage is the durable copy, so a
+ * shared link opened next week already knows who you are; sessionStorage wins
+ * when present so two tabs on one machine can be two different people.
+ */
+function storedName() {
+  const stored = sessionStorage.getItem(NAME_KEY) || localStorage.getItem(NAME_KEY) || '';
+  return stored.trim().replace(/\s+/g, ' ').slice(0, MAX_NAME_LENGTH);
+}
+
+function rememberName(name) {
+  localStorage.setItem(NAME_KEY, name); // remembered for next time
+  sessionStorage.setItem(NAME_KEY, name); // this tab's identity
+}
+
+/**
+ * @param {'join'|'edit'} mode - 'join' is the blocking gate on first arrival;
+ *   'edit' is the optional rename once you are already in the room.
+ */
+function openNameDialog(mode) {
+  const joining = mode === 'join';
+
+  el.nameTitle.textContent = joining ? 'Who’s joining?' : 'Change your name';
+  el.nameSub.textContent = joining
+    ? 'Your friends in this meetup will see this name on your pin.'
+    : 'Everyone in this meetup sees the new name straight away.';
+  el.nameSubmit.textContent = joining ? 'Join meetup' : 'Save';
+  el.nameCancel.hidden = joining; // there is nothing to fall back to yet
+  el.nameError.hidden = true;
+  el.nameInput.value = state.name || storedName();
+
+  if (!el.nameDialog.open) el.nameDialog.showModal();
+  el.nameInput.focus();
+  el.nameInput.select();
+}
+
+// Escape must not dismiss the join gate — there is no room behind it to return
+// to. Two belts: cancel the close request, and, because Chrome ignores that
+// until the page has user activation, put the dialog straight back if it does
+// slip through. state.name is only set once a name has actually been accepted.
+el.nameDialog.addEventListener('cancel', (event) => {
+  if (!state.name) event.preventDefault();
+});
+
+el.nameDialog.addEventListener('close', () => {
+  if (!state.name) openNameDialog('join');
+});
+
+el.nameCancel.addEventListener('click', () => el.nameDialog.close());
+
+el.nameForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+
+  const name = el.nameInput.value.trim().replace(/\s+/g, ' ').slice(0, MAX_NAME_LENGTH);
+  if (!name) {
+    el.nameError.textContent = 'Please enter a name so your friends know which pin is yours.';
+    el.nameError.hidden = false;
+    el.nameInput.focus();
+    return;
+  }
+
+  const previous = state.name;
+  state.name = name;
+  rememberName(name);
+  el.nameDialog.close();
+
+  if (!state.joined) {
+    joinRoom();
+  } else if (name !== previous) {
+    // A reconnect would carry the new name in its query string anyway; this
+    // updates the live session without waiting for one.
+    if (state.socket?.readyState === WebSocket.OPEN) {
+      state.socket.send(JSON.stringify({ type: 'rename', name }));
+    }
+    toast(`You’re now “${name}” in this meetup.`);
+  }
+});
+
+/** Everything that must wait until we know who the user is. */
+function joinRoom() {
+  state.joined = true;
+  el.shareToggle.disabled = false;
+  connect();
+  // Asked only now so the browser's location prompt does not compete with the
+  // name dialog for the user's attention.
+  previewLocation();
+}
+
 // ----------------------------------------------------------------- WebSocket
 
 function connect() {
-  const name = sessionStorage.getItem('meetup:name') || localStorage.getItem('meetup:name') || 'Guest';
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-  const url = `${scheme}://${location.host}/ws?room=${encodeURIComponent(roomId)}&name=${encodeURIComponent(name)}`;
+  const url = `${scheme}://${location.host}/ws?room=${encodeURIComponent(roomId)}&name=${encodeURIComponent(state.name)}`;
 
   const socket = new WebSocket(url);
   state.socket = socket;
@@ -299,9 +417,62 @@ function sendLocation({ lat, lng, accuracy }) {
   }
 }
 
+// ----------------------------------------------------- Local location preview
+
+/**
+ * Puts the map where the user actually is the moment the room opens, so it
+ * never starts as a blank world view. This is a single read, kept entirely in
+ * this browser — nothing reaches the server until "Send my location" is pressed.
+ */
+function previewLocation() {
+  if (!('geolocation' in navigator) || !window.isSecureContext) return;
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      if (state.sharing) return; // real sharing started first; it owns the pin
+      state.previewCoords = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      };
+      renderPreview();
+    },
+    // Denied or unavailable is not an error here: the user never asked for
+    // this, so stay quiet and leave the world view in place.
+    () => {},
+    // A cached, coarse fix is fine — this is only about framing the map.
+    { enableHighAccuracy: false, maximumAge: 300000, timeout: 10000 },
+  );
+}
+
+function renderPreview() {
+  if (!state.map || !state.previewCoords) return;
+
+  const { lat, lng, accuracy } = state.previewCoords;
+  state.map.upsertMarker(PREVIEW_ID, {
+    position: { lat, lng },
+    name: 'You',
+    color: SELF_COLOR,
+    isSelf: true,
+    muted: true,
+    accuracy,
+    signature: 'preview',
+  });
+
+  // Only claim the viewport while it is still the default world view — never
+  // fight an auto-fit over real participants or a pan the user made.
+  if (!state.userMovedMap && !state.hasAutoFitted) state.map.setCenter({ lat, lng }, 15);
+}
+
+function clearPreview() {
+  if (!state.previewCoords) return;
+  state.previewCoords = null;
+  state.map?.removeMarker(PREVIEW_ID);
+}
+
 // --------------------------------------------------------------- Geolocation
 
-function startSharing() {
+function startSharing({ highAccuracy = true } = {}) {
   el.geoError.hidden = true;
 
   if (!('geolocation' in navigator)) {
@@ -326,6 +497,7 @@ function startSharing() {
       state.lastCoords = coords;
       if (!state.sharing) {
         state.sharing = true;
+        clearPreview(); // the shared pin takes over from here
         el.shareToggle.disabled = false;
         el.shareToggle.textContent = 'Stop sharing';
         el.shareToggle.classList.add('danger');
@@ -335,14 +507,23 @@ function startSharing() {
     },
     (error) => {
       stopSharing({ silent: true });
+
+      // POSITION_UNAVAILABLE from a high-accuracy request often just means the
+      // precise backend (GPS / CoreLocation) had nothing to give; the coarse
+      // network fix frequently still resolves, so try that once before giving up.
+      if (error.code === 2 && highAccuracy) {
+        startSharing({ highAccuracy: false });
+        return;
+      }
+
       const messages = {
         1: 'You denied location access. Allow it in the browser’s address-bar icon, then try again.',
-        2: 'Your position is unavailable right now. Check that location services are on for your device.',
+        2: 'Your device could not produce a position — this is the operating system, not the app. On macOS check System Settings → Privacy & Security → Location Services: the switch must be on and your browser ticked in the list. Then quit the browser fully and reopen this page.',
         3: 'Timed out getting your location. Try again, ideally near a window or on Wi-Fi.',
       };
       showGeoError(messages[error.code] || error.message);
     },
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+    { enableHighAccuracy: highAccuracy, maximumAge: 5000, timeout: 20000 },
   );
 }
 
@@ -350,6 +531,12 @@ function stopSharing({ silent = false } = {}) {
   if (state.watchId !== null) {
     navigator.geolocation.clearWatch(state.watchId);
     state.watchId = null;
+  }
+  // Keep showing yourself locally once you stop publishing, so the map does not
+  // jump back to a view with nothing on it.
+  if (state.lastCoords) {
+    state.previewCoords = state.lastCoords;
+    renderPreview();
   }
   state.sharing = false;
   state.lastCoords = null;
@@ -411,9 +598,21 @@ window.addEventListener('beforeunload', () => {
 
 // ------------------------------------------------------------------ Bootstrap
 
-connect();
 renderPeople();
 
+// Nobody joins as an anonymous "Guest": either this browser already knows the
+// name from a previous visit, or we ask for one before touching the room.
+state.name = storedName();
+if (state.name) {
+  joinRoom();
+} else {
+  el.status.textContent = 'Enter your name to join';
+  openNameDialog('join');
+}
+
 initMap()
-  .then(renderAll)
+  .then(() => {
+    renderAll();
+    renderPreview();
+  })
   .catch((err) => showMapFallback(err.message));

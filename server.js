@@ -26,7 +26,7 @@ function resolveProvider() {
 
 // How long a room survives with nobody connected before it is dropped.
 const EMPTY_ROOM_TTL_MS = 30 * 60 * 1000;
-// A participant whose location is older than this is treated as stale by the UI.
+// Upper bound on one meetup, so a shared link cannot be used to exhaust memory.
 const MAX_PARTICIPANTS_PER_ROOM = 25;
 
 /**

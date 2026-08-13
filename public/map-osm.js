@@ -44,20 +44,32 @@ export async function createMap(container) {
     worldCopyJump: true,
   });
 
-  // Bottom-right, matching where Google puts its zoom controls.
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  // Top-left is the only corner no app chrome covers: the roster panel owns the
+  // bottom (full width on mobile, bottom-right on desktop) and the topbar owns
+  // the top strip, which the CSS offset below clears.
+  L.control.zoom({ position: 'topleft' }).addTo(map);
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(map);
 
+  // Leaflet measures the container once at construction. If it was still being
+  // laid out (fonts, mobile viewport units, an orientation change) it requests
+  // tiles for the wrong box and the map renders blank or half-filled, so
+  // re-measure whenever the container's size actually changes.
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(() => map.invalidateSize({ animate: false })).observe(container);
+  } else {
+    window.addEventListener('resize', () => map.invalidateSize({ animate: false }));
+  }
+
   const markers = new Map();
 
   /** Leaflet needs explicit icon geometry; anchor the dot's centre on the point. */
-  function iconFor({ name, color, isSelf }) {
+  function iconFor({ name, color, isSelf, muted }) {
     return L.divIcon({
-      html: `<div class="pin-anchor">${buildPinHTML({ name, color, isSelf })}</div>`,
+      html: `<div class="pin-anchor">${buildPinHTML({ name, color, isSelf, muted })}</div>`,
       className: 'pin-divicon', // suppress Leaflet's default white box
       iconSize: [0, 0],
       iconAnchor: [0, 0],
@@ -69,13 +81,13 @@ export async function createMap(container) {
       map.on('dragstart', onPan);
     },
 
-    upsertMarker(id, { position, name, color, isSelf, accuracy, signature }) {
+    upsertMarker(id, { position, name, color, isSelf, muted, accuracy, signature }) {
       const latlng = [position.lat, position.lng];
       let entry = markers.get(id);
 
       if (!entry) {
         const marker = L.marker(latlng, {
-          icon: iconFor({ name, color, isSelf }),
+          icon: iconFor({ name, color, isSelf, muted }),
           zIndexOffset: isSelf ? 1000 : 0,
           interactive: false,
         }).addTo(map);
@@ -95,7 +107,7 @@ export async function createMap(container) {
         // Only rebuild the icon when the label or colour changed — otherwise the
         // pulse animation restarts on every GPS tick.
         if (entry.signature !== signature) {
-          entry.marker.setIcon(iconFor({ name, color, isSelf }));
+          entry.marker.setIcon(iconFor({ name, color, isSelf, muted }));
           entry.signature = signature;
         }
         entry.accuracyCircle.setLatLng(latlng);

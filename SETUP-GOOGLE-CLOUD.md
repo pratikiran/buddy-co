@@ -51,6 +51,11 @@ http://localhost:3000/*
 http://127.0.0.1:3000/*
 ```
 
+⚠ **The port matters.** These entries only cover port 3000. If you run the server on a
+different port (say `PORT=3100` because something else already owns 3000), add
+`http://localhost:3100/*` too, or Google will reject the key with
+`RefererNotAllowedMapError`. The server prints the URL it bound on boot — match that.
+
 Add your production domain later when you deploy.
 
 **API restrictions** → *Restrict key* → tick **Maps JavaScript API** only.

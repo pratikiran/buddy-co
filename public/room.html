@@ -30,7 +30,7 @@
     <section class="panel">
       <div class="panel-grip" id="panel-grip" role="button" tabindex="0" aria-label="Toggle panel"></div>
 
-      <button id="share-toggle" class="primary big">Send my location</button>
+      <button id="share-toggle" class="primary big" disabled>Send my location</button>
       <p id="geo-error" class="error" hidden></p>
 
       <ul id="people" class="people"></ul>
@@ -38,6 +38,34 @@
 
     <div id="provider-badge" class="provider-badge" hidden></div>
     <div id="toast" class="toast" hidden></div>
+
+    <dialog id="name-dialog" class="name-dialog" aria-labelledby="name-dialog-title">
+      <form id="name-form" novalidate>
+        <h2 id="name-dialog-title">Who’s joining?</h2>
+        <p id="name-dialog-sub" class="name-dialog-sub">
+          Your friends in this meetup will see this name on your pin.
+        </p>
+
+        <label class="field">
+          <span>Your name</span>
+          <input
+            id="name-input"
+            type="text"
+            placeholder="e.g. Pratik"
+            maxlength="24"
+            autocomplete="name"
+            enterkeyhint="go"
+          />
+        </label>
+
+        <p id="name-error" class="error" hidden></p>
+
+        <div class="dialog-actions">
+          <button type="button" id="name-cancel" class="secondary" hidden>Cancel</button>
+          <button type="submit" id="name-submit" class="primary">Join meetup</button>
+        </div>
+      </form>
+    </dialog>
 
     <script type="module" src="/app.js"></script>
   </body>
