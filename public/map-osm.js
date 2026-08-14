@@ -67,9 +67,9 @@ export async function createMap(container) {
   const markers = new Map();
 
   /** Leaflet needs explicit icon geometry; anchor the dot's centre on the point. */
-  function iconFor({ name, color, isSelf, muted }) {
+  function iconFor({ name, color, isSelf, muted, stale }) {
     return L.divIcon({
-      html: `<div class="pin-anchor">${buildPinHTML({ name, color, isSelf, muted })}</div>`,
+      html: `<div class="pin-anchor">${buildPinHTML({ name, color, isSelf, muted, stale })}</div>`,
       className: 'pin-divicon', // suppress Leaflet's default white box
       iconSize: [0, 0],
       iconAnchor: [0, 0],
@@ -81,13 +81,13 @@ export async function createMap(container) {
       map.on('dragstart', onPan);
     },
 
-    upsertMarker(id, { position, name, color, isSelf, muted, accuracy, signature }) {
+    upsertMarker(id, { position, name, color, isSelf, muted, stale, accuracy, signature }) {
       const latlng = [position.lat, position.lng];
       let entry = markers.get(id);
 
       if (!entry) {
         const marker = L.marker(latlng, {
-          icon: iconFor({ name, color, isSelf, muted }),
+          icon: iconFor({ name, color, isSelf, muted, stale }),
           zIndexOffset: isSelf ? 1000 : 0,
           interactive: false,
         }).addTo(map);
@@ -107,7 +107,7 @@ export async function createMap(container) {
         // Only rebuild the icon when the label or colour changed — otherwise the
         // pulse animation restarts on every GPS tick.
         if (entry.signature !== signature) {
-          entry.marker.setIcon(iconFor({ name, color, isSelf, muted }));
+          entry.marker.setIcon(iconFor({ name, color, isSelf, muted, stale }));
           entry.signature = signature;
         }
         entry.accuracyCircle.setLatLng(latlng);

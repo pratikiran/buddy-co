@@ -63,13 +63,13 @@ export async function createMap(container, config) {
       map.addListener('dragstart', onPan);
     },
 
-    upsertMarker(id, { position, name, color, isSelf, muted, accuracy, signature }) {
+    upsertMarker(id, { position, name, color, isSelf, muted, stale, accuracy, signature }) {
       let entry = markers.get(id);
       if (!entry) {
         const marker = new AdvancedMarkerElement({
           map,
           position,
-          content: buildPinElement({ name, color, isSelf, muted }),
+          content: buildPinElement({ name, color, isSelf, muted, stale }),
           title: isSelf ? 'You' : name,
           zIndex: isSelf ? 10 : 1,
         });
@@ -91,7 +91,7 @@ export async function createMap(container, config) {
         // Only swap the pin DOM when the label or colour actually changed —
         // rebuilding it every GPS tick would restart the pulse animation.
         if (entry.signature !== signature) {
-          entry.marker.content = buildPinElement({ name, color, isSelf, muted });
+          entry.marker.content = buildPinElement({ name, color, isSelf, muted, stale });
           entry.marker.title = isSelf ? 'You' : name;
           entry.signature = signature;
         }

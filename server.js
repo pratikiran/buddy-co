@@ -50,7 +50,11 @@ function newRoomId() {
 function getOrCreateRoom(roomId) {
   let room = rooms.get(roomId);
   if (!room) {
-    room = { createdAt: Date.now(), emptySince: null, members: new Map() };
+    // emptySince starts at creation, not null: a room born from POST /api/rooms
+    // has no members yet, and the sweeper only collects rooms whose emptySince
+    // is set. Leaving it null meant a link that was created but never opened
+    // stayed in memory forever. The first connection clears it below.
+    room = { createdAt: Date.now(), emptySince: Date.now(), members: new Map() };
     rooms.set(roomId, room);
   }
   return room;
@@ -66,21 +70,53 @@ function serializeRoom(room) {
     accuracy: m.accuracy,
     updatedAt: m.updatedAt,
     sharing: m.sharing,
+    away: m.away,
   }));
 }
 
+/**
+ * Full roster, sent when the membership itself changes (someone joined or left).
+ *
+ * The frame deliberately carries no selfId. That one field used to differ per
+ * recipient, which forced a separate JSON.stringify for every member and made a
+ * broadcast cost O(M²) — 187µs in a full 25-person room. Identical bytes for
+ * everyone means one pass for the whole room; the client learns its own id from
+ * the 'welcome' frame, which always arrives first.
+ */
 function broadcastRoom(roomId) {
   const room = rooms.get(roomId);
   if (!room) return;
-  const participants = serializeRoom(room);
-  for (const member of room.members.values()) {
-    send(member.socket, { type: 'state', selfId: member.id, participants });
-  }
+  broadcastFrame(room, JSON.stringify({ type: 'state', participants: serializeRoom(room) }));
+}
+
+/**
+ * One member changed — the common case, roughly once per second per member.
+ *
+ * Sending only what moved keeps a room at O(M²) bytes/sec instead of the O(M³)
+ * a full roster costs: 0.10 MB/s rather than 2.42 MB/s in a full room.
+ *
+ * Safe because a client can only receive a patch for someone it already knows:
+ * every membership change broadcasts a full roster first, and WebSocket delivery
+ * is ordered.
+ */
+function broadcastPatch(roomId, memberId, patch) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  broadcastFrame(room, JSON.stringify({ type: 'patch', id: memberId, patch }));
+}
+
+function broadcastFrame(room, frame) {
+  for (const member of room.members.values()) sendFrame(member.socket, frame);
 }
 
 function send(socket, payload) {
+  sendFrame(socket, JSON.stringify(payload));
+}
+
+/** Sends an already-serialized frame, so one JSON pass can feed a whole room. */
+function sendFrame(socket, frame) {
   if (socket.readyState === socket.OPEN) {
-    socket.send(JSON.stringify(payload));
+    socket.send(frame);
   }
 }
 
@@ -189,11 +225,18 @@ wss.on('connection', (socket, req) => {
     accuracy: null,
     updatedAt: null,
     sharing: false,
+    // Set when the client tells us its page was hidden. Distinct from 'sharing':
+    // an away member is still in the meetup, we just know their last position is
+    // no longer being refreshed.
+    away: false,
     socket,
   };
   room.members.set(member.id, member);
 
-  send(socket, { type: 'welcome', selfId: member.id, roomId });
+  // updatedAt values are stamped with this clock, so the client needs it to
+  // measure staleness. Phone clocks drift by minutes; comparing a server
+  // timestamp against a device clock would make "last seen" fiction.
+  send(socket, { type: 'welcome', selfId: member.id, roomId, serverNow: Date.now() });
   broadcastRoom(roomId);
 
   socket.isAlive = true;
@@ -218,7 +261,21 @@ wss.on('connection', (socket, req) => {
         member.accuracy = coords.accuracy;
         member.updatedAt = Date.now();
         member.sharing = true;
-        broadcastRoom(roomId);
+        const patch = {
+          lat: member.lat,
+          lng: member.lng,
+          accuracy: member.accuracy,
+          updatedAt: member.updatedAt,
+          sharing: true,
+        };
+        // A position proves the page is running, so it also cancels 'away' — but
+        // only pay the extra field on the rare update that actually clears it,
+        // since this is the once-per-second-per-member hot path.
+        if (member.away) {
+          member.away = false;
+          patch.away = false;
+        }
+        broadcastPatch(roomId, member.id, patch);
         break;
       }
       case 'stop': {
@@ -227,12 +284,30 @@ wss.on('connection', (socket, req) => {
         member.lng = null;
         member.accuracy = null;
         member.updatedAt = Date.now();
-        broadcastRoom(roomId);
+        broadcastPatch(roomId, member.id, {
+          lat: null,
+          lng: null,
+          accuracy: null,
+          updatedAt: member.updatedAt,
+          sharing: false,
+        });
         break;
       }
       case 'rename': {
         member.name = sanitizeName(msg.name);
-        broadcastRoom(roomId);
+        broadcastPatch(roomId, member.id, { name: member.name });
+        break;
+      }
+      // The client sends these from visibilitychange, which fires before the
+      // browser freezes the page. It is the only warning we get: the heartbeat
+      // cannot see a backgrounded tab, because the browser's network stack
+      // answers pings without running any page JS.
+      case 'away':
+      case 'active': {
+        const away = msg.type === 'away';
+        if (member.away === away) break; // nothing new to tell the room
+        member.away = away;
+        broadcastPatch(roomId, member.id, { away });
         break;
       }
       default:

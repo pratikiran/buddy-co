@@ -42,7 +42,40 @@ const state = {
   hasAutoFitted: false,
   userMovedMap: false,
   previewCoords: null, // our own position, shown locally but not published
+  clockSkew: 0, // serverNow - Date.now(), measured once from the welcome frame
 };
+
+// How long without an update before a pin stops counting as live. Comfortably
+// more than two missed keepalives, so a single dropped fix is not enough.
+const STALE_AFTER_MS = 45000;
+// watchPosition can go quiet when you stand still, which would decay a perfectly
+// healthy pin into "no signal". Re-publishing the last fix on this interval keeps
+// updatedAt honest and turns its absence into a real signal.
+const POSITION_KEEPALIVE_MS = 20000;
+
+/**
+ * updatedAt is stamped by the server, so ages have to be measured against the
+ * server's clock. Device clocks are routinely minutes off, which would otherwise
+ * show "last seen 4m ago" for a pin that arrived a second ago — or, worse, mark
+ * a live friend stale.
+ */
+function serverNow() {
+  return Date.now() + state.clockSkew;
+}
+
+function isStale(participant) {
+  if (!participant.updatedAt) return false;
+  return serverNow() - participant.updatedAt > STALE_AFTER_MS;
+}
+
+/**
+ * Two routes to the same conclusion — this position is last-known, not live.
+ * 'away' is the explicit heads-up from a page that was being hidden; staleness
+ * is the fallback for every case where that message never made it out.
+ */
+function isPaused(participant) {
+  return Boolean(participant.away) || isStale(participant);
+}
 
 // Marker id for the local-only preview pin. Prefixed so it can never collide
 // with a server-assigned participant id.
@@ -125,13 +158,17 @@ function renderMarkers() {
   for (const participant of located) {
     const isSelf = participant.id === state.selfId;
     const color = colorFor(participant);
+    const stale = isPaused(participant);
     state.map.upsertMarker(participant.id, {
       position: { lat: participant.lat, lng: participant.lng },
       name: participant.name,
       color,
       isSelf,
+      stale,
       accuracy: participant.accuracy,
-      signature: `${isSelf ? 'You' : participant.name}|${color}`,
+      // Only a state flip rebuilds the pin DOM — deliberately not the age, which
+      // changes every second and would rebuild every marker with it.
+      signature: `${isSelf ? 'You' : participant.name}|${color}|${stale ? 'stale' : 'live'}`,
     });
     state.renderedIds.add(participant.id);
   }
@@ -182,7 +219,7 @@ function formatDistance(meters) {
 
 function formatAgo(timestamp) {
   if (!timestamp) return '';
-  const seconds = Math.round((Date.now() - timestamp) / 1000);
+  const seconds = Math.round((serverNow() - timestamp) / 1000);
   if (seconds < 10) return 'just now';
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
@@ -197,8 +234,9 @@ function renderPeople() {
 
   for (const participant of state.participants) {
     const isSelf = participant.id === state.selfId;
+    const paused = participant.sharing && participant.lat !== null && isPaused(participant);
     const li = document.createElement('li');
-    li.className = 'person' + (isSelf ? ' is-self' : '');
+    li.className = 'person' + (isSelf ? ' is-self' : '') + (paused ? ' is-paused' : '');
 
     const swatch = document.createElement('span');
     swatch.className = 'swatch';
@@ -221,7 +259,15 @@ function renderPeople() {
       if (!isSelf && self?.sharing && self.lat !== null) {
         bits.push(formatDistance(haversineMeters(self, participant)));
       }
-      bits.push(`updated ${formatAgo(participant.updatedAt)}`);
+      // Saying "last seen" rather than "updated" is the whole point: the number
+      // is the same, but one implies the pin is current and the other does not.
+      if (participant.away) {
+        bits.push(`paused · last seen ${formatAgo(participant.updatedAt)}`);
+      } else if (isStale(participant)) {
+        bits.push(`no signal · last seen ${formatAgo(participant.updatedAt)}`);
+      } else {
+        bits.push(`updated ${formatAgo(participant.updatedAt)}`);
+      }
       meta.textContent = bits.join(' · ');
     }
 
@@ -267,8 +313,11 @@ function renderAll() {
   renderPeople();
 }
 
-// Keeps the "updated 12s ago" strings honest without any server chatter.
-setInterval(renderPeople, 10000);
+// Keeps the "updated 12s ago" strings honest without any server chatter. This
+// drives the map too, not just the roster: a pin crossing STALE_AFTER_MS is a
+// change nobody sends us, so without a tick it would stay coloured until the
+// next unrelated message happened to arrive.
+setInterval(renderAll, 10000);
 
 // ------------------------------------------------------------------ Identity
 
@@ -353,11 +402,35 @@ el.nameForm.addEventListener('submit', (event) => {
   }
 });
 
+/**
+ * Whether this tab was sharing in this room when it was last alive.
+ *
+ * sessionStorage, keyed by room, is the exact privacy boundary we want: iOS
+ * discarding a backgrounded tab and reloading it should pick sharing back up,
+ * because the user opted in and never opted out — but deliberately closing the
+ * tab ends the session, and the flag dies with it.
+ */
+const SHARING_KEY = `meetup:sharing:${roomId}`;
+
+function rememberSharing(on) {
+  if (on) sessionStorage.setItem(SHARING_KEY, '1');
+  else sessionStorage.removeItem(SHARING_KEY);
+}
+
 /** Everything that must wait until we know who the user is. */
 function joinRoom() {
   state.joined = true;
   el.shareToggle.disabled = false;
   connect();
+
+  // A reload we did not ask for should not silently demote us to a stale pin
+  // that no longer moves. Note this only ever restarts what this same tab was
+  // already doing in this same room.
+  if (sessionStorage.getItem(SHARING_KEY)) {
+    startSharing({ resumed: true });
+    return; // startSharing owns the pin; no local-only preview needed
+  }
+
   // Asked only now so the browser's location prompt does not compete with the
   // name dialog for the user's attention.
   previewLocation();
@@ -379,6 +452,9 @@ function connect() {
     el.status.classList.remove('bad');
     // A reconnect must re-publish our last known position.
     if (state.sharing && state.lastCoords) sendLocation(state.lastCoords);
+    // The server gave this connection a fresh member with away=false. If we are
+    // reconnecting while still hidden, say so rather than looking live.
+    if (document.hidden) sendSignal('away');
   });
 
   socket.addEventListener('message', (event) => {
@@ -389,13 +465,27 @@ function connect() {
       return;
     }
     if (msg.type === 'welcome') {
+      // Our id arrives here and only here — 'state' no longer carries it, so
+      // that one frame can be shared byte-for-byte with the whole room.
       state.selfId = msg.selfId;
+      // One sample is plenty: the network latency it folds in is milliseconds
+      // against a 45-second threshold, and clocks do not drift within a meetup.
+      if (typeof msg.serverNow === 'number') state.clockSkew = msg.serverNow - Date.now();
     } else if (msg.type === 'state') {
-      state.selfId = msg.selfId ?? state.selfId;
+      // Full roster: sent on join and on leave, i.e. whenever membership moves.
       state.participants = msg.participants;
       const others = state.participants.length - 1;
       el.status.textContent =
         others <= 0 ? 'Connected · waiting for friends' : `Connected · ${others + 1} here`;
+      renderAll();
+    } else if (msg.type === 'patch') {
+      // One participant changed. Membership is unchanged, so the status line
+      // and the roster length stay as they are.
+      const participant = state.participants.find((p) => p.id === msg.id);
+      // An id we do not know can only mean we are mid-resync; the full 'state'
+      // that accompanies every membership change will bring us back in line.
+      if (!participant) return;
+      Object.assign(participant, msg.patch);
       renderAll();
     } else if (msg.type === 'error') {
       el.status.textContent = msg.message;
@@ -416,6 +506,69 @@ function sendLocation({ lat, lng, accuracy }) {
     state.socket.send(JSON.stringify({ type: 'location', lat, lng, accuracy }));
   }
 }
+
+function sendSignal(type) {
+  if (state.socket?.readyState === WebSocket.OPEN) {
+    state.socket.send(JSON.stringify({ type }));
+  }
+}
+
+// --------------------------------------------------------------- Page lifecycle
+
+/**
+ * The one moment we can still tell the room anything.
+ *
+ * Backgrounding a tab does not close the socket — the browser's network stack
+ * keeps answering the server's pings without running any page JS — so from the
+ * server's side nothing happens at all. Meanwhile watchPosition stops firing,
+ * because no browser grants a web page background location. Left alone that
+ * combination parks a confident-looking pin at a position the person left ten
+ * minutes ago. visibilitychange fires before the freeze, so we get one chance.
+ */
+document.addEventListener('visibilitychange', () => {
+  if (!state.joined) return;
+
+  if (document.hidden) {
+    sendSignal('away');
+    return;
+  }
+
+  sendSignal('active');
+  // watchPosition can take a while to produce its first fix after a resume, so
+  // ask for one directly instead of leaving a stale pin up in the meantime.
+  if (state.sharing) refreshPositionNow();
+});
+
+/** A one-shot fix used to catch up immediately after the page comes back. */
+function refreshPositionNow() {
+  if (!('geolocation' in navigator) || !window.isSecureContext) return;
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      if (!state.sharing) return; // sharing was turned off while we waited
+      state.lastCoords = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      };
+      sendLocation(state.lastCoords);
+    },
+    () => {}, // the running watch will catch up on its own
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+  );
+}
+
+/**
+ * Standing still can stop watchPosition from firing, which would let a healthy
+ * pin decay into "no signal". Re-sending the last fix keeps updatedAt truthful,
+ * and — because a frozen page cannot run this timer — makes a missing keepalive
+ * genuine evidence that the browser stopped running.
+ */
+setInterval(() => {
+  if (!state.sharing || !state.lastCoords) return;
+  if (document.hidden) return; // a hidden tab must look paused, not live
+  sendLocation(state.lastCoords);
+}, POSITION_KEEPALIVE_MS);
 
 // ----------------------------------------------------- Local location preview
 
@@ -472,7 +625,7 @@ function clearPreview() {
 
 // --------------------------------------------------------------- Geolocation
 
-function startSharing({ highAccuracy = true } = {}) {
+function startSharing({ highAccuracy = true, resumed = false } = {}) {
   el.geoError.hidden = true;
 
   if (!('geolocation' in navigator)) {
@@ -497,11 +650,16 @@ function startSharing({ highAccuracy = true } = {}) {
       state.lastCoords = coords;
       if (!state.sharing) {
         state.sharing = true;
+        rememberSharing(true);
         clearPreview(); // the shared pin takes over from here
         el.shareToggle.disabled = false;
         el.shareToggle.textContent = 'Stop sharing';
         el.shareToggle.classList.add('danger');
-        toast('Your pin is live. Anyone with the link can see it.');
+        toast(
+          resumed
+            ? 'Resumed sharing your location after the page reloaded.'
+            : 'Your pin is live. Anyone with the link can see it.',
+        );
       }
       sendLocation(coords);
     },
@@ -539,6 +697,7 @@ function stopSharing({ silent = false } = {}) {
     renderPreview();
   }
   state.sharing = false;
+  rememberSharing(false); // an explicit stop must not come back on reload
   state.lastCoords = null;
   el.shareToggle.disabled = false;
   el.shareToggle.textContent = 'Send my location';
