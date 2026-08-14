@@ -3,20 +3,49 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
     <title>Meet Up — share your location</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Gantari:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
     <link
       rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 1.5 22.5 12 12 22.5 1.5 12Z' fill='%23d9ef92'/></svg>"
     />
   </head>
   <body class="landing">
-    <main class="hero">
-      <div class="hero-icon">📍</div>
-      <h1>Meet Up</h1>
+    <!-- The routes that deliver every pin inside a room, running quietly here. -->
+    <div class="backdrop" aria-hidden="true">
+      <div class="glow"></div>
+      <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+        <path class="trace" d="M-40 640 C 260 640, 200 180, 520 180 S 900 620, 1240 300" />
+        <path class="trace trace-2" d="M-40 200 C 300 200, 240 700, 600 700 S 980 240, 1240 560" />
+        <path class="trace trace-3" d="M-40 420 C 220 420, 340 60, 640 60 S 1020 460, 1240 120" />
+      </svg>
+    </div>
+
+    <main class="hero stagger">
+      <div class="mark">
+        <svg class="mark-glyph" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 1.5 22.5 12 12 22.5 1.5 12Z" fill="#d9ef92" />
+          <path
+            d="M7.8 16.2C7.8 12.4 16.2 11.6 16.2 7.8"
+            stroke="#0d0e0d"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+        </svg>
+        <span class="eyebrow">Live location, link only</span>
+      </div>
+
+      <h1>Meet<span class="accent">.</span><br />Up</h1>
+
       <p class="tagline">
-        Start a meetup, send the link to your friends, and watch everyone’s pin land on the same
-        map.
+        Start a meetup, send the link, and watch everyone land on the same map.
       </p>
 
       <label class="field">
@@ -24,7 +53,7 @@
         <input id="name" type="text" placeholder="e.g. Pratik" maxlength="24" autocomplete="off" />
       </label>
 
-      <button id="create" class="primary">Start a meetup</button>
+      <button id="create" class="btn btn-lime btn-block">Start a meetup</button>
 
       <div class="divider"><span>or</span></div>
 
@@ -32,14 +61,14 @@
         <span>Join with a code</span>
         <div class="row">
           <input id="join-code" type="text" placeholder="abcd-1234" autocomplete="off" />
-          <button id="join" class="secondary">Join</button>
+          <button id="join" class="btn btn-ghost">Join</button>
         </div>
       </label>
 
       <p id="error" class="error" hidden></p>
 
       <footer class="fineprint">
-        Your location is only shared while you choose to share it, and only with people who have
+        Your location is shared only while you choose to share it, and only with people who have
         your link.
       </footer>
     </main>
@@ -47,12 +76,20 @@
     <script>
       const nameInput = document.getElementById('name');
       const errorEl = document.getElementById('error');
+      const createButton = document.getElementById('create');
 
       nameInput.value = localStorage.getItem('meetup:name') || '';
 
       function showError(message) {
         errorEl.textContent = message;
         errorEl.hidden = false;
+      }
+
+      /** The light band that crosses a button, so a press reads as fired. */
+      function sweep(button) {
+        button.classList.remove('is-sweeping');
+        void button.offsetWidth; // restart the animation on a repeat press
+        button.classList.add('is-sweeping');
       }
 
       function rememberName() {
@@ -68,15 +105,20 @@
         }
       }
 
-      document.getElementById('create').addEventListener('click', async () => {
+      createButton.addEventListener('click', async () => {
         errorEl.hidden = true;
+        sweep(createButton);
         rememberName();
+        createButton.disabled = true;
+        createButton.textContent = 'Opening your map…';
         try {
           const res = await fetch('/api/rooms', { method: 'POST' });
           if (!res.ok) throw new Error('Server said ' + res.status);
           const { roomId } = await res.json();
           location.href = `/r/${roomId}`;
         } catch (err) {
+          createButton.disabled = false;
+          createButton.textContent = 'Start a meetup';
           showError('Could not start a meetup: ' + err.message);
         }
       });
@@ -85,6 +127,7 @@
         errorEl.hidden = true;
         const code = document.getElementById('join-code').value.trim().toLowerCase();
         if (!code) return showError('Enter the code your friend sent you.');
+        sweep(document.getElementById('join'));
         rememberName();
         location.href = `/r/${encodeURIComponent(code)}`;
       }
@@ -94,7 +137,7 @@
         if (e.key === 'Enter') join();
       });
       nameInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') document.getElementById('create').click();
+        if (e.key === 'Enter') createButton.click();
       });
     </script>
   </body>

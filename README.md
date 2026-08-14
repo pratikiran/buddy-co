@@ -25,7 +25,8 @@ PORT=3100 npm start        # or set PORT= in .env
 
 Google Maps is the real map this app ships with. OpenStreetMap + Leaflet is a keyless
 stand-in for testing. Both are driven through the **same adapter interface**
-(`upsertMarker` / `removeMarker` / `fitBounds` / `focusOn` / `setCenter`), so the entire
+(`upsertMarker` / `removeMarker` / `fitBounds` / `focusOn` / `panTo` / `setCenter` /
+`toPixel`), so the entire
 app — sockets, roster, distances, pin lifecycle, auto-fit — is provider-agnostic. What you
 verify on OSM is genuinely what runs on Google; only the ~150 lines behind the adapter differ.
 
@@ -58,7 +59,8 @@ Browser geolocation only works on `localhost` or over HTTPS, so both sides must 
 `http://localhost:3000` (not `127.0.0.1`, not your LAN IP).
 
 1. Tab A: open <http://localhost:3000>, enter a name, click **Start a meetup**.
-2. Click **Send my location**, allow the permission prompt. Your blue pin appears.
+2. Click **Send my location**, allow the permission prompt. The map eases to your position
+   and your lime pin surfaces there.
 3. Copy the room URL from the address bar.
 4. Tab B: open that URL in a **different browser or a private/incognito window** — identity
    is per-tab-session, and a private window guarantees a separate one.
@@ -68,9 +70,10 @@ Browser geolocation only works on `localhost` or over HTTPS, so both sides must 
 6. Tab B: click **Send my location**. A second, differently-coloured pin appears **in both
    tabs**, and the panel shows the distance between you.
 
-Both tabs will report the same real coordinates (same device), so the two pins land on top
-of each other. To see them separated, use Chrome DevTools → ⋮ → **More tools → Sensors** →
-**Location** and pick a different city for one tab.
+Both tabs will report the same real coordinates (same device), so they land within a few
+metres and merge into one grouped pin. To see them separated, use Chrome DevTools → ⋮ →
+**More tools → Sensors** → **Location** and pick a different city for one tab — then
+**frame everyone** in the bottom-right controls puts both back on screen at once.
 
 ## How it works
 
@@ -127,19 +130,48 @@ labelled "last seen", so it reads as history rather than as live.
   the provider adapter. Knows nothing about Google or Leaflet specifically.
 - `public/map-google.js` / `public/map-osm.js` — the two adapters.
 - `public/pin.js` — the pin DOM, shared by both so a pin looks identical either way.
+- `public/styles.css` — the visual system: near-black surfaces, one lime accent (`#D9EF92`),
+  Gantari throughout. Motion carries the meaning: a pending fix draws an S-curve route with
+  a spark running it; the camera then eases to the coordinate, and only once it has arrived
+  does the pin grow out of that point, with a ring leaving the ground behind it. Going live
+  fires rings off your own pin. All of it collapses under `prefers-reduced-motion`.
 - The API key is served from `/api/config` rather than baked into HTML, so the only copy on
   disk is your gitignored `.env`. It is withheld entirely when the OSM provider is active.
 
 ## Behaviour worth knowing
 
+- **Guidance sits where the question comes up.** The join dialog warns that the browser is
+  about to ask for location and that allowing it shares nothing yet — a prompt that arrives
+  unexplained gets dismissed. While you are the only one in the room, the crew card carries
+  the three steps instead of an empty-state apology, and drops them once somebody joins. The
+  **?** key in the topbar opens the full reference — the flow, what other people can see, how
+  to unblock location per platform, and what the map keys do. Pressing the locate key on a
+  blocked permission opens that same reference with the fix lifted to the top, because a
+  blocked permission never re-prompts and there is nothing else the button could usefully do.
 - **The map opens where you are.** On load the room takes a single coarse position fix and
   centres the map on it, drawing a faded "You (not shared)" pin. That fix never leaves the
-  browser — it exists so the map is not a blank world view. If the permission is denied or
-  unavailable, the app stays silent and shows the world view.
+  browser — it exists so the map is not a blank world view. If the quick coarse attempt comes
+  back empty it asks the precise backend once before giving up, and if the browser refuses
+  outright it says so rather than leaving an unexplained world view. The locate key in the
+  bottom-right controls stays live either way, so it is always one tap back to yourself.
+  A fresh profile — a private window especially — gets a permission prompt, and the waiting
+  message names that rather than implying the app is busy searching.
 - **Sharing is opt-in and revocable.** Nothing is transmitted until you press the button;
   pressing **Stop sharing** wipes your coordinates from the server and removes your pin for
   everyone — locally the faded pin comes back so the map keeps its place.
 - **Live, not one-shot.** While sharing, your pin follows you.
+- **Two map controls, not one per person.** Bottom right, above the zoom keys: **frame
+  everyone**, which fits every pin on screen with room left for the panel, and **centre on
+  me**, which holds your own pin in the middle of the map as you move. Follow mode lights up
+  while it is on and releases the moment you drag the map, the way every map app behaves.
+  Tapping a row in the roster still centres on that person.
+- **People standing together share a pin.** Within 10 m — about a café, and comfortably
+  inside ordinary GPS error — pins would overlap into a stack where only the top name can
+  be read, so they merge into one pin that names everyone in it ("You, Sam & Maya") and
+  carries the head count. Grouping is anchored, not chained: everybody in a group is within
+  10 m of its anchor, so a line of people ten metres apart cannot merge into one pin
+  covering a whole street. The roster still lists each person separately, with their own
+  distance, so the merge never hides who is there.
 - **Sharing survives a reload you did not ask for.** Phones discard backgrounded tabs; if
   that happens the room reloads and picks sharing back up rather than quietly leaving you
   as a frozen pin. The flag lives in `sessionStorage` keyed by room, so it applies only to

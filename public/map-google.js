@@ -1,11 +1,14 @@
 // Google Maps adapter — the production map.
 // Implements the shared map interface consumed by app.js:
-//   init, addUserPanListener, upsertMarker, removeMarker, fitBounds,
-//   focusOn, getZoom
-import { buildPinElement } from './pin.js';
+//   addUserPanListener, upsertMarker, removeMarker, hasMarker, toPixel,
+//   fitBounds, focusOn, setCenter, getZoom
+import { buildPinElement, describe } from './pin.js';
 
 export const label = 'Google Maps';
 export const isTestProvider = false;
+
+// Closest an automatic fit is allowed to go. Street level, not rooftop level.
+const MAX_FIT_ZOOM = 17;
 
 export async function createMap(container, config) {
   // Google calls this global when the key itself is rejected (bad key, API not
@@ -46,15 +49,27 @@ export async function createMap(container, config) {
     center: { lat: 20, lng: 0 },
     zoom: 2,
     mapId: config.mapId,
+    // A styled Map ID overrides `styles`, so the dark basemap this design needs
+    // has to come from colorScheme. Older API versions ignore the option rather
+    // than failing, which just leaves the map light.
+    colorScheme: 'DARK',
     mapTypeControl: false,
     streetViewControl: false,
     fullscreenControl: false,
     clickableIcons: false,
     gestureHandling: 'greedy',
-    // Google's default bottom-right corner is behind the roster panel; the CSS
-    // for .gm-bundled-control then clears the topbar.
-    zoomControlOptions: { position: google.maps.ControlPosition.LEFT_TOP },
+    // Bottom-right, mirroring the Leaflet adapter: the panel owns the left
+    // column on desktop and the bottom sheet on phones.
+    zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
   });
+
+  // An empty overlay, kept only for its projection: it is the supported way to
+  // turn a coordinate into a pixel in the map container.
+  const projector = new google.maps.OverlayView();
+  projector.onAdd = () => {};
+  projector.onRemove = () => {};
+  projector.draw = () => {};
+  projector.setMap(map);
 
   const markers = new Map();
 
@@ -63,14 +78,32 @@ export async function createMap(container, config) {
       map.addListener('dragstart', onPan);
     },
 
-    upsertMarker(id, { position, name, color, isSelf, muted, stale, accuracy, signature }) {
+    upsertMarker(
+      id,
+      {
+        position,
+        people,
+        color,
+        isSelf,
+        muted,
+        stale,
+        arrive,
+        arriveDelay,
+        burst,
+        joined,
+        accuracy,
+        signature,
+      },
+    ) {
+      const pin = { people, color, isSelf, muted, stale, burst, joined };
       let entry = markers.get(id);
+
       if (!entry) {
         const marker = new AdvancedMarkerElement({
           map,
           position,
-          content: buildPinElement({ name, color, isSelf, muted, stale }),
-          title: isSelf ? 'You' : name,
+          content: buildPinElement({ ...pin, arrive, arriveDelay }),
+          title: describe(people, muted),
           zIndex: isSelf ? 10 : 1,
         });
         const accuracyCircle = new google.maps.Circle({
@@ -78,10 +111,10 @@ export async function createMap(container, config) {
           center: position,
           radius: accuracy || 0,
           strokeColor: color,
-          strokeOpacity: 0.35,
+          strokeOpacity: 0.3,
           strokeWeight: 1,
           fillColor: color,
-          fillOpacity: 0.12,
+          fillOpacity: 0.07,
           clickable: false,
         });
         entry = { marker, accuracyCircle, signature };
@@ -90,9 +123,10 @@ export async function createMap(container, config) {
         entry.marker.position = position;
         // Only swap the pin DOM when the label or colour actually changed —
         // rebuilding it every GPS tick would restart the pulse animation.
+        // `arrive` is never passed here: a pin already on the map has arrived.
         if (entry.signature !== signature) {
-          entry.marker.content = buildPinElement({ name, color, isSelf, muted, stale });
-          entry.marker.title = isSelf ? 'You' : name;
+          entry.marker.content = buildPinElement(pin);
+          entry.marker.title = describe(people, muted);
           entry.signature = signature;
         }
         entry.accuracyCircle.setCenter(position);
@@ -111,15 +145,36 @@ export async function createMap(container, config) {
 
     hasMarker: (id) => markers.has(id),
 
+    /** Screen-space position, for effects drawn in the page rather than the map. */
+    toPixel(position) {
+      const projection = projector.getProjection();
+      if (!projection) return null; // the overlay has not been drawn yet
+      const point = projection.fromLatLngToContainerPixel(
+        new google.maps.LatLng(position.lat, position.lng),
+      );
+      return point ? { x: point.x, y: point.y } : null;
+    },
+
     fitBounds(points, padding) {
       const bounds = new google.maps.LatLngBounds();
       for (const p of points) bounds.extend(p);
       map.fitBounds(bounds, padding);
+      // Two friends standing together make a bounds box of nearly zero size,
+      // which otherwise fits at maximum zoom — a view of one rooftop. Google has
+      // no maxZoom option on fitBounds, so clamp once the move has settled.
+      google.maps.event.addListenerOnce(map, 'idle', () => {
+        if (map.getZoom() > MAX_FIT_ZOOM) map.setZoom(MAX_FIT_ZOOM);
+      });
     },
 
     focusOn(position, zoom) {
       map.panTo(position);
       map.setZoom(zoom);
+    },
+
+    /** Follow mode's every-fix nudge: keeps the zoom, just re-centres. */
+    panTo(position) {
+      map.panTo(position);
     },
 
     setCenter(position, zoom) {
