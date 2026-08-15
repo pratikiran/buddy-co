@@ -3,11 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
     <title>Meet Up — live map</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Gantari:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
     <link
       rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 1.5 22.5 12 12 22.5 1.5 12Z' fill='%23d9ef92'/></svg>"
     />
   </head>
   <body class="room">
@@ -19,25 +26,150 @@
     </div>
 
     <header class="topbar">
-      <a class="brand" href="/" title="Home">📍</a>
-      <div class="topbar-main">
-        <div class="room-code" id="room-code">…</div>
-        <div class="status" id="status">Connecting…</div>
+      <a class="brand" href="/" aria-label="Meet Up home">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 1.5 22.5 12 12 22.5 1.5 12Z" fill="#d9ef92" />
+          <path
+            d="M7.8 16.2C7.8 12.4 16.2 11.6 16.2 7.8"
+            stroke="#0d0e0d"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+        </svg>
+      </a>
+
+      <div class="chip chip-code">
+        <span class="chip-key">ROOM</span>
+        <span class="room-code" id="room-code">…</span>
       </div>
-      <button id="share" class="secondary small">Share link</button>
+
+      <div class="chip chip-status" id="status-chip">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span class="status" id="status">Connecting…</span>
+      </div>
+
+      <div class="topbar-right">
+        <button id="guide" class="icon-key" type="button" title="How Meet Up works" aria-label="How Meet Up works">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="1.7" />
+            <path
+              d="M9.4 9.4a2.7 2.7 0 1 1 3.5 2.6c-.6.2-.9.7-.9 1.3v.5"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+            />
+            <circle cx="12" cy="16.9" r="1.05" fill="currentColor" />
+          </svg>
+        </button>
+        <button id="share" class="btn btn-ghost btn-small">
+          <svg viewBox="0 0 24 24" fill="none" width="16" height="16" aria-hidden="true">
+            <path
+              d="M8.7 13.4 15.3 17M15.3 7 8.7 10.6M6 12a2.6 2.6 0 1 1-5.2 0 2.6 2.6 0 0 1 5.2 0Zm17.2-6.6a2.6 2.6 0 1 1-5.2 0 2.6 2.6 0 0 1 5.2 0Zm0 13.2a2.6 2.6 0 1 1-5.2 0 2.6 2.6 0 0 1 5.2 0Z"
+              stroke="#d9ef92"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span class="btn-label">Share link</span>
+        </button>
+        <span class="count-badge" id="count-badge" title="People in this meetup">1</span>
+      </div>
     </header>
 
     <section class="panel">
-      <div class="panel-grip" id="panel-grip" role="button" tabindex="0" aria-label="Toggle panel"></div>
+      <button
+        class="panel-grip"
+        id="panel-grip"
+        type="button"
+        aria-label="Collapse or expand the panel"
+      ></button>
 
-      <button id="share-toggle" class="primary big" disabled>Send my location</button>
+      <button id="share-toggle" class="btn btn-lime btn-block" disabled>Send my location</button>
       <p id="geo-error" class="error" hidden></p>
 
-      <ul id="people" class="people"></ul>
+      <div class="card card-crew">
+        <div class="card-head">
+          <h2>Crew</h2>
+          <span class="tag" id="crew-count">1</span>
+        </div>
+        <ul id="people" class="people"></ul>
+      </div>
     </section>
 
+    <!-- Map navigation, stacked above the zoom keys in the same corner. -->
+    <div class="map-controls" id="map-controls">
+      <button
+        id="frame-all"
+        class="map-key"
+        type="button"
+        title="Frame everyone"
+        aria-label="Frame everyone"
+        disabled
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M3 8.5V5.5A2.5 2.5 0 0 1 5.5 3h3M15.5 3h3A2.5 2.5 0 0 1 21 5.5v3M21 15.5v3a2.5 2.5 0 0 1-2.5 2.5h-3M8.5 21h-3A2.5 2.5 0 0 1 3 18.5v-3"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+          />
+          <circle cx="9.6" cy="10.4" r="1.7" fill="currentColor" />
+          <circle cx="14.6" cy="14.2" r="1.7" fill="currentColor" />
+        </svg>
+      </button>
+
+      <button
+        id="center-me"
+        class="map-key"
+        type="button"
+        title="Centre on me"
+        aria-label="Centre on me"
+        aria-pressed="false"
+        disabled
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="6.6" stroke="currentColor" stroke-width="1.7" />
+          <circle cx="12" cy="12" r="2.6" fill="currentColor" />
+          <path
+            d="M12 1.6v3.2M12 19.2v3.2M22.4 12h-3.2M4.8 12H1.6"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+    </div>
+
+    <!-- The wait, drawn as the route a pin will take. Shown only while a fix is
+         pending; the arriving pin finishes the gesture it starts. -->
+    <div class="locator" id="locator" hidden aria-hidden="true">
+      <div class="locator-stage">
+        <svg class="locator-svg" viewBox="0 0 260 170" fill="none">
+          <path
+            class="locator-route-ghost"
+            d="M 12 148 C 84 148, 66 30, 132 30 S 190 128, 250 26"
+            pathLength="420"
+          />
+          <!-- pathLength normalises the geometry to 420 units so the dash maths
+               in .locator-route covers exactly one pass of the curve. -->
+          <path
+            class="locator-route"
+            d="M 12 148 C 84 148, 66 30, 132 30 S 190 128, 250 26"
+            pathLength="420"
+          />
+        </svg>
+        <span class="locator-spark"></span>
+        <span class="locator-target">
+          <span class="locator-ring"></span>
+          <span class="locator-ring locator-ring-2"></span>
+          <span class="locator-ring locator-ring-3"></span>
+        </span>
+      </div>
+      <p class="locator-text" id="locator-text">Finding you…</p>
+    </div>
+
     <div id="provider-badge" class="provider-badge" hidden></div>
-    <div id="toast" class="toast" hidden></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <dialog id="name-dialog" class="name-dialog" aria-labelledby="name-dialog-title">
       <form id="name-form" novalidate>
@@ -60,11 +192,124 @@
 
         <p id="name-error" class="error" hidden></p>
 
+        <!-- The browser's own permission dialog opens the moment this one
+             closes. Saying so first is the difference between a considered
+             "Allow" and a reflexive dismissal. -->
+        <p class="note" id="name-note">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11Z"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+            <circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6" />
+          </svg>
+          <span>
+            Next, your browser asks for location. Allowing it only puts you on
+            <em>your</em> map — nothing reaches your friends until you press
+            <strong>Send my location</strong>.
+          </span>
+        </p>
+
         <div class="dialog-actions">
-          <button type="button" id="name-cancel" class="secondary" hidden>Cancel</button>
-          <button type="submit" id="name-submit" class="primary">Join meetup</button>
+          <button type="button" id="name-cancel" class="btn btn-ghost" hidden>Cancel</button>
+          <button type="submit" id="name-submit" class="btn btn-lime">Join meetup</button>
         </div>
       </form>
+    </dialog>
+
+    <!-- One reference, two ways in: the ? key in the topbar, and the locate key
+         when the browser has location blocked (which opens it on the fix). -->
+    <dialog id="guide-dialog" class="guide-dialog" aria-labelledby="guide-title">
+      <div class="guide-head">
+        <h2 id="guide-title">How Meet Up works</h2>
+        <button type="button" id="guide-close" class="icon-key" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="m7 7 10 10M17 7 7 17"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+      </div>
+      <p class="guide-lede" id="guide-lede">
+        A meetup is one map that everybody with the link can see.
+      </p>
+
+      <div class="guide-body">
+        <section class="guide-section guide-flow">
+          <h3>Three steps</h3>
+          <ol class="guide-steps">
+            <li>
+              <span><strong>Send my location.</strong> Your pin goes on the map. Nothing leaves this
+              device before you press it.</span>
+            </li>
+            <li>
+              <span><strong>Share link.</strong> Whoever opens it joins this same map and picks a name.</span>
+            </li>
+            <li>
+              <span><strong>Watch them land.</strong> Pins update live, and the panel shows how far away
+              everyone is.</span>
+            </li>
+          </ol>
+        </section>
+
+        <section class="guide-section">
+          <h3>What other people see</h3>
+          <ul class="guide-list">
+            <li>
+              <span>Only people with the link — the room code is random, but it is not a password.</span>
+            </li>
+            <li>
+              <span>Your position while you are sharing, and nothing after you press
+              <strong>Stop sharing</strong>. That wipes your coordinates from the server.</span>
+            </li>
+            <li>
+              <span>A grey, dashed pin marked <em>paused</em> once you switch away from this tab, so a
+              stale position never passes for a live one.</span>
+            </li>
+          </ul>
+        </section>
+
+        <section class="guide-section guide-unblock" id="guide-unblock">
+          <h3>If location is blocked</h3>
+          <p class="guide-note">
+            Browsers remember a refusal, so the prompt will not come back on its own. A private
+            window counts as a fresh browser and asks again.
+          </p>
+          <ul class="guide-list">
+            <li>
+              <span><span class="guide-tag">Desktop</span> Click the icon at the left of the address bar
+              → <strong>Location</strong> → <strong>Allow</strong>, then reload.</span>
+            </li>
+            <li>
+              <span><span class="guide-tag">iPhone</span> Settings → Privacy &amp; Security → Location
+              Services → your browser → <strong>While Using the App</strong>, then reload.</span>
+            </li>
+            <li>
+              <span><span class="guide-tag">Android</span> Tap the lock icon in the address bar →
+              <strong>Permissions</strong> → <strong>Location</strong>, then reload.</span>
+            </li>
+          </ul>
+        </section>
+
+        <section class="guide-section">
+          <h3>The keys in the corner</h3>
+          <ul class="guide-list">
+            <li>
+              <span><strong>Frame everyone</strong> fits every pin on screen at once.</span>
+            </li>
+            <li>
+              <span><strong>Centre on me</strong> holds your pin in the middle as you move, until you
+              drag the map.</span>
+            </li>
+          </ul>
+        </section>
+      </div>
+
+      <button type="button" id="guide-done" class="btn btn-lime btn-block">Got it</button>
     </dialog>
 
     <script type="module" src="/app.js"></script>
